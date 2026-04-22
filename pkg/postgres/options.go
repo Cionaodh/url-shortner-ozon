@@ -18,9 +18,9 @@ func ConnAttempts(attempts int) Option {
 	}
 }
 
-// ConnTimeout устанавливает время ожидания между попытками подключения
+// retryDelay устанавливает время ожидания между попытками подключения
 func ConnTimeout(timeout time.Duration) Option {
 	return func(c *Postgres) {
-		c.connTimeout = timeout
+		c.retryDelay = timeout
 	}
 }

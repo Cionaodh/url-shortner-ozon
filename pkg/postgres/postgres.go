@@ -11,9 +11,11 @@ import (
 )
 
 const (
-	defaultMaxPoolSize  = 1
-	defaultConnAttempts = 10
-	defaultConnTimeout  = time.Second
+	defaultMaxPoolSize   = 10
+	defaultConnAttempts  = 10
+	defaultRetryDelay    = time.Second
+	defaultCreateTimeout = 30 * time.Second
+	defaultPingTimeout   = 2 * time.Second
 )
 
 var (
@@ -25,7 +27,7 @@ var (
 type Postgres struct {
 	maxPoolSize  int
 	connAttempts int
-	connTimeout  time.Duration
+	retryDelay   time.Duration
 
 	Pool *pgxpool.Pool
 }
@@ -34,7 +36,7 @@ func New(pgURL string, opts ...Option) (*Postgres, error) {
 	pg := &Postgres{
 		maxPoolSize:  defaultMaxPoolSize,
 		connAttempts: defaultConnAttempts,
-		connTimeout:  defaultConnTimeout,
+		retryDelay:   defaultRetryDelay,
 	}
 
 	for _, opt := range opts {
@@ -43,31 +45,38 @@ func New(pgURL string, opts ...Option) (*Postgres, error) {
 
 	poolConfig, err := pgxpool.ParseConfig(pgURL)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrParseConfig, err)
+		return nil, fmt.Errorf("%w: %v", ErrParseConfig, err)
 	}
 
 	poolConfig.MaxConns = int32(pg.maxPoolSize)
 
-	for pg.connAttempts > 0 {
-		pg.Pool, err = pgxpool.NewWithConfig(context.Background(), poolConfig)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrCreatePool, err)
-		}
+	ctxCreate, cancelCreate := context.WithTimeout(context.Background(), defaultCreateTimeout)
+	defer cancelCreate()
 
-		if err = pg.Pool.Ping(context.Background()); err == nil {
-			break
-		}
-
-		pg.connAttempts--
-		log.Printf("Postgres is not ready, retrying in %s... (%d attempts left)", pg.connTimeout, pg.connAttempts)
-		time.Sleep(pg.connTimeout)
-	}
-
+	pg.Pool, err = pgxpool.NewWithConfig(ctxCreate, poolConfig)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrPing, err)
+		return nil, fmt.Errorf("%w: %v", ErrCreatePool, err)
 	}
 
-	return pg, nil
+	for attemptsLeft := pg.connAttempts; attemptsLeft > 0; attemptsLeft-- {
+		ctxPing, cancelPing := context.WithTimeout(context.Background(), defaultPingTimeout)
+		err = pg.Pool.Ping(ctxPing)
+		cancelPing()
+
+		if err == nil {
+			return pg, nil
+		}
+
+		remainingAfterThis := attemptsLeft - 1
+		log.Printf("Postgres not ready, retrying in %s... (%d attempts left)", pg.retryDelay, remainingAfterThis)
+
+		if remainingAfterThis > 0 {
+			time.Sleep(pg.retryDelay)
+		}
+	}
+
+	pg.Pool.Close()
+	return nil, fmt.Errorf("%w: %v", ErrPing, err)
 }
 
 func (p *Postgres) Close() {
