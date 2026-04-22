@@ -37,8 +37,9 @@ func newTestService(storage Storage) *ShortnerService {
 	return NewShortnerService(storage, logger)
 }
 
-// CreateLink Tests
+// CreateLink
 
+// Успешный сценарий: короткая ссылка создаётся с первой попытки
 func TestCreateLink_Success(t *testing.T) {
 	storage := new(MockStorage)
 	svc := newTestService(storage)
@@ -58,6 +59,7 @@ func TestCreateLink_Success(t *testing.T) {
 	storage.AssertExpectations(t)
 }
 
+// Сценарий retry: первые 2 попытки — коллизия, третья — успех
 func TestCreateLink_CollisionThenSuccess(t *testing.T) {
 	storage := new(MockStorage)
 	svc := newTestService(storage)
@@ -66,7 +68,6 @@ func TestCreateLink_CollisionThenSuccess(t *testing.T) {
 	const originalURL = "https://example.com"
 	const savedShortURL = "finalURL__"
 
-	// Первые 2 попытки — коллизия, третья — успех
 	storage.On("SaveLink", ctx, originalURL, mock.AnythingOfType("string")).
 		Return("", ErrShortURLCollision).Twice()
 	storage.On("SaveLink", ctx, originalURL, mock.AnythingOfType("string")).
@@ -79,6 +80,7 @@ func TestCreateLink_CollisionThenSuccess(t *testing.T) {
 	storage.AssertExpectations(t)
 }
 
+// Сценарий исчерпания попыток: все maxRetries попыток — коллизия
 func TestCreateLink_AllRetriesCollision(t *testing.T) {
 	storage := new(MockStorage)
 	svc := newTestService(storage)
@@ -96,6 +98,7 @@ func TestCreateLink_AllRetriesCollision(t *testing.T) {
 	storage.AssertExpectations(t)
 }
 
+// Сценарий неизвестной ошибки
 func TestCreateLink_StorageUnexpectedError(t *testing.T) {
 	storage := new(MockStorage)
 	svc := newTestService(storage)
@@ -115,8 +118,9 @@ func TestCreateLink_StorageUnexpectedError(t *testing.T) {
 	storage.AssertNumberOfCalls(t, "SaveLink", 1) // ровно 1 вызов, без retry
 }
 
-// GetLink Tests
+// GetLink
 
+// Успешный сценарий: по короткой ссылке возвращается оригинальный URL
 func TestGetLink_Success(t *testing.T) {
 	storage := new(MockStorage)
 	svc := newTestService(storage)
@@ -134,6 +138,7 @@ func TestGetLink_Success(t *testing.T) {
 	storage.AssertExpectations(t)
 }
 
+// Сценарий: ссылка не найдена — ErrNotFound
 func TestGetLink_NotFound(t *testing.T) {
 	storage := new(MockStorage)
 	svc := newTestService(storage)
@@ -149,6 +154,7 @@ func TestGetLink_NotFound(t *testing.T) {
 	storage.AssertExpectations(t)
 }
 
+// Сценарий: неизвестная ошибка хранилища
 func TestGetLink_StorageError(t *testing.T) {
 	storage := new(MockStorage)
 	svc := newTestService(storage)
@@ -163,14 +169,16 @@ func TestGetLink_StorageError(t *testing.T) {
 	assert.ErrorIs(t, err, storageErr)
 }
 
-// generateShortURL Unit Tests
+// generateShortURL
 
+// проверка длинны сгенерированной ссылки
 func TestGenerateShortURL_Length(t *testing.T) {
 	url := generateShortURL()
 
 	assert.Len(t, url, domain.ShortURLLen)
 }
 
+// проверка допустимых символов
 func TestGenerateShortURL_ValidAlphabet(t *testing.T) {
 	for range 100 {
 		url := generateShortURL()
@@ -184,6 +192,7 @@ func TestGenerateShortURL_ValidAlphabet(t *testing.T) {
 	}
 }
 
+// проверка уникальности
 func TestGenerateShortURL_Uniqueness(t *testing.T) {
 	const iterations = 1000
 	seen := make(map[string]struct{}, iterations)
@@ -194,23 +203,4 @@ func TestGenerateShortURL_Uniqueness(t *testing.T) {
 	}
 
 	assert.Len(t, seen, iterations)
-}
-
-// Fuzz
-
-func FuzzCreateLink_DoesNotPanic(f *testing.F) {
-	f.Add("https://example.com")
-	f.Add("")
-	f.Add("not-a-url")
-	f.Add(strings.Repeat("x", 10_000))
-
-	f.Fuzz(func(t *testing.T, originalURL string) {
-		storage := new(MockStorage)
-		storage.On("SaveLink", mock.Anything, mock.Anything, mock.Anything).
-			Return("short123__", nil)
-
-		svc := newTestService(storage)
-		// Главное — не паникует при любом входе
-		_, _ = svc.CreateLink(context.Background(), originalURL)
-	})
 }

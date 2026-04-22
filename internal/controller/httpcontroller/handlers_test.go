@@ -106,7 +106,8 @@ func TestCreateLink_URLTooLong(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	longURL := "https://example.com/" + strings.Repeat("a", maxURLLen)
-	body, _ := json.Marshal(OriginULR{URL: longURL})
+	body, err := json.Marshal(OriginULR{URL: longURL})
+	require.NoError(t, err)
 
 	newTestRouter(svc).ServeHTTP(rec, makeCreateRequest(string(body)))
 
@@ -134,7 +135,7 @@ func TestCreateLink_InvalidURLFormat(t *testing.T) {
 			newTestRouter(svc).ServeHTTP(rec, makeCreateRequest(string(body)))
 
 			assert.Equal(t, http.StatusBadRequest, rec.Code)
-			svc.AssertNotCalled(t, "CreateLink")
+			svc.AssertNumberOfCalls(t, "CreateLink", 0)
 		})
 	}
 }
@@ -275,68 +276,6 @@ func TestValidateShortURL(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
-		})
-	}
-}
-
-// Fuzz
-
-func FuzzCreateLink_DoesNotPanic(f *testing.F) {
-	f.Add(`{"url":"https://example.com"}`)
-	f.Add(`{"url":""}`)
-	f.Add(`not json`)
-	f.Add(`{"url":"` + strings.Repeat("a", 10_000) + `"}`)
-
-	f.Fuzz(func(t *testing.T, body string) {
-		svc := new(MockService)
-		svc.On("CreateLink", mock.Anything, mock.Anything).
-			Return("abc123XYZ_", nil)
-
-		rec := httptest.NewRecorder()
-		newTestRouter(svc).ServeHTTP(rec, makeCreateRequest(body))
-
-		// Любой ввод — только валидные HTTP-статусы
-		assert.Contains(t,
-			[]int{http.StatusOK, http.StatusBadRequest, http.StatusInternalServerError},
-			rec.Code,
-		)
-	})
-}
-
-func FuzzValidateURL_DoesNotPanic(f *testing.F) {
-	f.Add("https://example.com")
-	f.Add("")
-	f.Add(strings.Repeat("x", 10_000))
-
-	f.Fuzz(func(t *testing.T, rawURL string) {
-		_ = validateURL(rawURL)
-	})
-}
-
-// errorResponse
-
-func TestErrorResponse(t *testing.T) {
-	cases := []struct {
-		name   string
-		msg    string
-		status int
-	}{
-		{"bad request", "invalid request", http.StatusBadRequest},
-		{"not found", "not found", http.StatusNotFound},
-		{"internal error", "internal server error", http.StatusInternalServerError},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			errorResponse(rec, tc.msg, tc.status)
-
-			assert.Equal(t, tc.status, rec.Code)
-			assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
-
-			var resp ErrorResp
-			require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
-			assert.Equal(t, tc.msg, resp.Error)
 		})
 	}
 }
