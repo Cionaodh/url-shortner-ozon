@@ -5,16 +5,19 @@ import (
 	"errors"
 
 	"github.com/Cionaodh/url-shortner-ozon/internal/service"
-	"github.com/Cionaodh/url-shortner-ozon/pkg/postgres"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-type Storage struct {
-	*postgres.Postgres
+type Querier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-func NewStorage(pg *postgres.Postgres) *Storage {
+type Storage struct {
+	pool Querier
+}
+
+func NewStorage(pg Querier) *Storage {
 	return &Storage{pg}
 }
 
@@ -32,7 +35,7 @@ func (st *Storage) SaveLink(ctx context.Context, originalURL, shortURL string) (
 	`
 
 	var returnedShortURL string
-	err := st.Pool.QueryRow(ctx, query, originalURL, shortURL).Scan(&returnedShortURL)
+	err := st.pool.QueryRow(ctx, query, originalURL, shortURL).Scan(&returnedShortURL)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "links_short_url_key" {
@@ -52,7 +55,7 @@ func (st *Storage) GetLink(ctx context.Context, shortURL string) (string, error)
 	`
 
 	var originURL string
-	err := st.Pool.QueryRow(ctx, query, shortURL).Scan(&originURL)
+	err := st.pool.QueryRow(ctx, query, shortURL).Scan(&originURL)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", service.ErrNotFound
