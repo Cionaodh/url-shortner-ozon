@@ -1,0 +1,62 @@
+package pgdb
+
+import (
+	"context"
+	"errors"
+
+	"github.com/Cionaodh/url-shortner-ozon/internal/service"
+	"github.com/Cionaodh/url-shortner-ozon/pkg/postgres"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+)
+
+type Storage struct {
+	*postgres.Postgres
+}
+
+func NewStorage(pg *postgres.Postgres) *Storage {
+	return &Storage{pg}
+}
+
+// SaveLink сохраняет ссылку или возвращает существующую
+func (st *Storage) SaveLink(ctx context.Context, originalURL, shortURL string) (string, error) {
+
+	query := `
+		INSERT INTO links (origin_url, short_url) 
+		VALUES ($1, $2) 
+		ON CONFLICT (origin_url) DO UPDATE 
+		SET origin_url = EXCLUDED.origin_url 
+		RETURNING short_url;
+	`
+
+	var returnedShortURL string
+	err := st.Pool.QueryRow(ctx, query, originalURL, shortURL).Scan(&returnedShortURL)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "links_short_url_key" {
+			// 23505 - код ошибки unique_violation - произошла колизия
+			return "", service.ErrShortURLCollision
+		}
+		return "", err
+	}
+
+	return returnedShortURL, nil
+}
+
+func (st *Storage) GetLink(ctx context.Context, shortURL string) (string, error) {
+	query := `
+		SELECT origin_url FROM links
+		WHERE short_url = $1;
+	`
+
+	var originURL string
+	err := st.Pool.QueryRow(ctx, query, shortURL).Scan(&originURL)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", service.ErrNotFound
+		}
+		return "", err
+	}
+
+	return originURL, nil
+}
