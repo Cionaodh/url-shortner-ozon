@@ -33,7 +33,7 @@ func Run(cfg *config.Config, log *slog.Logger) {
 			os.Exit(1)
 		}
 		defer pg.Close()
-		repo = pgdb.NewStorage(pg)
+		repo = pgdb.NewStorage(pg.Pool)
 
 	default:
 		log.Error("unknown storage type", slog.String("type", cfg.Storage.Type))
