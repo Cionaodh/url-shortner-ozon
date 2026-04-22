@@ -16,7 +16,6 @@ import (
 )
 
 func Run(cfg *config.Config, log *slog.Logger) {
-	log = log.With("component", "app")
 
 	var repo service.Storage
 

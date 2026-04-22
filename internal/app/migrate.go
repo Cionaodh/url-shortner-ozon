@@ -17,7 +17,7 @@ const (
 )
 
 func Migrations(log *slog.Logger) {
-	log = log.With("component", "mirgate")
+	log = log.With("component", "migrations")
 
 	log.Info("starting database migrations")
 
