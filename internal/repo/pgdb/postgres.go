@@ -20,12 +20,14 @@ func NewStorage(pg *postgres.Postgres) *Storage {
 
 // SaveLink сохраняет ссылку или возвращает существующую
 func (st *Storage) SaveLink(ctx context.Context, originalURL, shortURL string) (string, error) {
-
+	// SET origin_url = links.origin_url - является костылем, чтобы срабатывал RETURNING при повторах оригинального url
+	// по сути перезаписываем ту же строку
+	// но данная конструкция позволяет добиться атомарности операции
 	query := `
 		INSERT INTO links (origin_url, short_url) 
 		VALUES ($1, $2) 
 		ON CONFLICT (origin_url) DO UPDATE 
-		SET origin_url = EXCLUDED.origin_url 
+		SET origin_url = links.origin_url
 		RETURNING short_url;
 	`
 
