@@ -12,7 +12,7 @@ import (
 
 var (
 	ErrShortURLCollision = errors.New("short url collision")
-	ErrNotFound          = errors.New("not found")
+	ErrNotFound          = errors.New("url not found")
 )
 
 type Storage interface {
