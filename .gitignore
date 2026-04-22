@@ -15,3 +15,6 @@ bin/
 
 # Test binary, built with `go test -c`
 *.test
+
+readmeTest.md
+Makefile
