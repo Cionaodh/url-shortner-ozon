@@ -18,6 +18,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	app.Migrations(log)
+	// app.Migrations(log)
 	app.Run(cfg, log)
 }

@@ -8,8 +8,9 @@ import (
 
 type (
 	Config struct {
-		HTTP HTTP
-		PG   PG
+		HTTP    HTTP
+		PG      PG
+		Storage StorageConfig
 	}
 
 	HTTP struct {
@@ -19,6 +20,10 @@ type (
 	PG struct {
 		PoolMax int    `env:"PG_POOL_MAX" envDefault:"10"`
 		Conn    string `env:"PG_CONN,required"` // обязательное поле
+	}
+
+	StorageConfig struct {
+		Type string `env:"STORAGE_TYPE" envDefault:"postgres"`
 	}
 )
 

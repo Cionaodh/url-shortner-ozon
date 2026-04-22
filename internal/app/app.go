@@ -7,7 +7,8 @@ import (
 	"syscall"
 
 	"github.com/Cionaodh/url-shortner-ozon/internal/config"
-	"github.com/Cionaodh/url-shortner-ozon/internal/controller/http"
+	"github.com/Cionaodh/url-shortner-ozon/internal/controller/httpcontroller"
+	"github.com/Cionaodh/url-shortner-ozon/internal/repo/inmemory"
 	"github.com/Cionaodh/url-shortner-ozon/internal/repo/pgdb"
 	"github.com/Cionaodh/url-shortner-ozon/internal/service"
 	"github.com/Cionaodh/url-shortner-ozon/pkg/httpserver"
@@ -16,16 +17,31 @@ import (
 
 func Run(cfg *config.Config, log *slog.Logger) {
 
-	pg, err := postgres.New(cfg.PG.Conn, postgres.MaxPoolSize(cfg.PG.PoolMax))
-	if err != nil {
-		log.Error("failed to init postgres", slog.Any("error", err))
-		return
+	var repo service.Storage
+
+	switch cfg.Storage.Type {
+	case "memory":
+		log.Info("using in-memory storage")
+		repo = inmemory.NewStorage()
+
+	case "postgres":
+		log.Info("using postgres storage")
+		Migrations(log)
+		pg, err := postgres.New(cfg.PG.Conn, postgres.MaxPoolSize(cfg.PG.PoolMax))
+		if err != nil {
+			log.Error("failed to init postgres", slog.Any("error", err))
+			os.Exit(1)
+		}
+		defer pg.Close()
+		repo = pgdb.NewStorage(pg)
+
+	default:
+		log.Error("unknown storage type", slog.String("type", cfg.Storage.Type))
+		os.Exit(1)
 	}
-	defer pg.Close()
 
-	s := service.NewShortnerService(pgdb.NewStorage(pg), log)
-
-	router := http.NewRouter(s, log)
+	s := service.NewShortnerService(repo, log)
+	router := httpcontroller.NewRouter(s, log)
 
 	httpServer := httpserver.New(router, httpserver.Port(cfg.HTTP.Port))
 	httpServer.Start()
@@ -37,8 +53,8 @@ func Run(cfg *config.Config, log *slog.Logger) {
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 
 	select {
-	case s := <-interrupt:
-		log.Info("stopping the app on signal", slog.String("signal", s.String()))
+	case sig := <-interrupt:
+		log.Info("stopping the app on signal", slog.String("signal", sig.String()))
 	case err := <-httpServer.Notify():
 		log.Error("stopping the app on server error", slog.Any("error", err))
 	}
