@@ -11,10 +11,8 @@ import (
 func NewRouter(s Service, log *slog.Logger) http.Handler {
 	r := chi.NewRouter()
 
-	r.Use(middleware.RequestID)
-	// r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	r.Use(middleware.Recoverer) // ловит панику
 
 	handler := NewHandler(s, log)
 

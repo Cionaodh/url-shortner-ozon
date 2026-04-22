@@ -31,7 +31,10 @@ type Handler struct {
 }
 
 func NewHandler(s Service, log *slog.Logger) *Handler {
-	return &Handler{s: s, log: log}
+	return &Handler{
+		s:   s,
+		log: log.With("component", "handlers"),
+	}
 }
 
 type OriginULR struct {
@@ -45,6 +48,7 @@ type ShortURL struct {
 func (h *Handler) CreateLink(w http.ResponseWriter, r *http.Request) {
 	var req OriginULR
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.log.Warn("failed to decode create link request", slog.Any("error", err))
 		errorResponse(w, "invalid request", http.StatusBadRequest)
 		return
 	}
@@ -57,12 +61,13 @@ func (h *Handler) CreateLink(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	short, err := h.s.CreateLink(ctx, req.URL)
 	if err != nil {
+		h.log.Error("failed to create short link", slog.Any("error", err))
 		errorResponse(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ShortURL{ShortURL: short})
+	_ = json.NewEncoder(w).Encode(ShortURL{ShortURL: short})
 }
 
 func (h *Handler) GetLink(w http.ResponseWriter, r *http.Request) {
@@ -80,12 +85,14 @@ func (h *Handler) GetLink(w http.ResponseWriter, r *http.Request) {
 			errorResponse(w, "not found", http.StatusNotFound)
 			return
 		}
+
+		h.log.Error("failed to get original link", slog.String("short_url", short), slog.Any("error", err))
 		errorResponse(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(OriginULR{URL: original})
+	_ = json.NewEncoder(w).Encode(OriginULR{URL: original})
 }
 
 func validateURL(rawURL string) error {

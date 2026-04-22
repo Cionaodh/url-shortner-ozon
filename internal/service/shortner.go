@@ -30,7 +30,10 @@ type ShortnerService struct {
 }
 
 func NewShortnerService(rp Storage, log *slog.Logger) *ShortnerService {
-	return &ShortnerService{rp, log}
+	return &ShortnerService{
+		repo: rp,
+		l:    log.With("component", "service"),
+	}
 }
 
 // CreateLink создает и сохраняет короткую ссылку для переданного URL

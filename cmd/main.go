@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log/slog"
 	"os"
 
@@ -14,7 +13,7 @@ func main() {
 	// Config
 	cfg, err := config.NewConfig()
 	if err != nil {
-		log.Info(fmt.Sprintf("Config error: %s", err))
+		log.Error("config error", slog.Any("error", err))
 		os.Exit(1)
 	}
 

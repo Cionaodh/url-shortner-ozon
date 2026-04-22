@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -18,10 +17,13 @@ const (
 )
 
 func Migrations(log *slog.Logger) {
-	log.Info("Configuring migrations...")
+	log = log.With("component", "mirgate")
+
+	log.Info("starting database migrations")
+
 	pgUrl, ok := os.LookupEnv("PG_CONN")
 	if !ok || len(pgUrl) == 0 {
-		log.Error("Migrations error - PG_CONN not specified")
+		log.Error("postgres connection string is not set", slog.String("env", "PG_CONN"))
 		os.Exit(1)
 	}
 	pgUrl += "?sslmode=disable"
@@ -39,25 +41,25 @@ func Migrations(log *slog.Logger) {
 		}
 
 		time.Sleep(defaultTimeout)
-		log.Info(fmt.Sprintf("Postgres trying to connect, attempts left: %d", connAttempts))
+		log.Warn("failed to connect to postgres, retrying", slog.Int("attempts_left", connAttempts-1), slog.Any("error", err))
 		connAttempts--
 	}
 
 	if err != nil {
-		log.Error(fmt.Errorf("app - init - migrate.New: %w", err).Error())
+		log.Error("failed to initialize migrations", slog.Any("error", err))
 		os.Exit(1)
 	}
 	defer mgrt.Close()
 
 	if err = mgrt.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		log.Error(fmt.Errorf("app - init - mgrt.Up: %w", err).Error())
+		log.Error("failed to apply migrations", slog.Any("error", err))
 		os.Exit(1)
 	}
 
 	if errors.Is(err, migrate.ErrNoChange) {
-		log.Info("Migration no change...")
+		log.Info("no new migrations to apply")
 		return
 	}
 
-	log.Info("Migration successful up...")
+	log.Info("migration successful up")
 }
