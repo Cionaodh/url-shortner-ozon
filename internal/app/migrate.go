@@ -46,7 +46,7 @@ func Migrations(log *slog.Logger) error {
 			break
 		}
 
-		log.Warn("failed to connect to postgres, retrying", slog.Int("attempts_left", connAttempts-1), slog.Any("error", err))
+		log.Info("failed to connect to postgres, retrying", slog.Int("attempts_left", connAttempts-1), slog.Any("error", err))
 		time.Sleep(defaultTimeout)
 
 		connAttempts--
@@ -63,6 +63,7 @@ func Migrations(log *slog.Logger) error {
 
 	if errors.Is(err, migrate.ErrNoChange) {
 		log.Info("no new migrations to apply")
+		return nil
 	}
 
 	log.Info("migration successful up")
