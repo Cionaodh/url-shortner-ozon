@@ -26,7 +26,11 @@ func Run(cfg *config.Config, log *slog.Logger) {
 
 	case "postgres":
 		log.Info("using postgres storage")
-		Migrations(log)
+		err := Migrations(log)
+		if err != nil {
+			log.Error("migration error: ", slog.Any("error", err))
+			os.Exit(1)
+		}
 		pg, err := postgres.New(cfg.PG.Conn, postgres.MaxPoolSize(cfg.PG.PoolMax))
 		if err != nil {
 			log.Error("failed to init postgres", slog.Any("error", err))
